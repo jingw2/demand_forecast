@@ -61,5 +61,5 @@ python mq_rnn.py -e 100 -np 100 -nl 2 -sp -rt
 ```
 
 # Reference
-[DeepAR](https://arxiv.org/abs/1704.04110)
-[MQ-RNN](https://arxiv.org/abs/1711.11053)
+* [DeepAR](https://arxiv.org/abs/1704.04110)
+* [MQ-RNN](https://arxiv.org/abs/1711.11053)
