@@ -275,7 +275,7 @@ def train(
         tot_res = pd.DataFrame(y_pred_list).T
         tot_res['mu'] = tot_res.apply(lambda x: np.mean(x), axis=1)
 
-        smape = util.SMAPE(y[sample_idx], tot_res.mu)
+        smape = util.SMAPE(y_test[sample_idx], tot_res.mu)
         print("SMAPE: {}%".format(smape))
         mape_list.append(smape)
 
@@ -285,11 +285,11 @@ def train(
         tot_res['two_lower'] = tot_res.apply(lambda x: np.mean(x) - 2*np.std(x), axis=1)
         if show_plot:
             plt.figure(i)
-            plt.plot([i + train_periods + 1 for i in range(len(tot_res))], tot_res.mu, 'bo-', linewidth=2)
+            plt.plot([i + train_periods + 1 for i in range(len(tot_res))], tot_res.mu, 'r-', linewidth=2)
             plt.fill_between(x=tot_res.index+train_periods+1, y1=tot_res.lower, y2=tot_res.upper, alpha=0.5)
             plt.fill_between(x=tot_res.index+train_periods+1, y1=tot_res.two_lower, y2=tot_res.two_upper, alpha=0.5)
             plt.title('Prediction uncertainty')
-            plt.plot(range(len(y[sample_idx])), y[sample_idx], "r-")
+            plt.plot(range(len(y[sample_idx])), y[sample_idx], "k-")
             plt.legend(["prediction", "true"])
             plt.show()
     return losses, mape_list
@@ -329,29 +329,6 @@ if __name__ == "__main__":
         if args.show_plot:
             plt.plot(range(len(losses)), losses, "k-")
             plt.show()
-    # # scaler = StandardScaler()
-    # X = pickle.load(open("beijing_x.pkl", "rb"))
-    # y = pickle.load(open("beijing_y.pkl", "rb"))
-    # # normalize scale
-    # # y = scaler.transform(y)
-    # # scaler.fit(y)
-    # # scale handling from paper
-    # # y = y / np.mean(y, axis=1).reshape((-1, 1))  
-    # num_samples, num_features, num_periods = X.shape
-    # sample_idx = 10
-    # num_periods = 180
-    # # X = np.repeat(X[:, :, :num_periods].reshape((-1, num_features, num_periods)), 100, axis=0)
-    # # y = np.repeat(y[:, :num_periods].reshape((-1, num_periods)), 100, axis=0)
-    # X = X[:, :, :num_periods].reshape((-1, num_features, num_periods))
-    # y = y[:, :num_periods].reshape((-1, num_periods))
-    # print("X shape: ", X.shape)
-    # print("y shape: ", y.shape)
-    # epoches = 1000
-    # step_per_epoch = 5
-    # losses, mape_list = train(X, y, epoches, step_per_epoch, likelihood="g", seq_len=7)
-    # print("Average MAPE in test skus: ", np.mean(mape_list))
-    # if show_plot:
-    #     plt.plot(range(len(losses)), losses, "k-")
-    #     plt.show()
+
 
 
