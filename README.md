@@ -10,6 +10,7 @@ pip install -r requirement.txt
 ```
 
 ## DeepAR
+It is used to predict in rolling ways. DeepAR has to apply ground truth of previous historical days to predict the next few days. For example, if you would like to predict demands in 2019-07-17, you has to use ground truth in 2019-07-16.
 
 #### Arguments
 
