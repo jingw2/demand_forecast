@@ -1,6 +1,6 @@
 # Demand Forecast Models
 
-Implementation of DeepAR, MQ-RNN and Deep Factor Models. 
+Pytorch Implementation of DeepAR, MQ-RNN, Deep Factor Models and TPA-LSTM. Others, see LSTNet[https://github.com/laiguokun/LSTNet]
 
 ## Requirements
 Please install [Pytorch](https://pytorch.org/) before run it, and 
