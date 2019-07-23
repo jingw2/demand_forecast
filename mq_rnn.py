@@ -225,25 +225,3 @@ if __name__ == "__main__":
         if args.show_plot:
             plt.plot(range(len(losses)), losses, "k-")
             plt.show()
-    raise
-    # scaler = StandardScaler()
-    # scaler = MinMaxScaler()
-    X = pickle.load(open("beijing_x.pkl", "rb"))
-    y = pickle.load(open("beijing_y.pkl", "rb"))
-    # normalize scale
-    # scaler.fit(y)
-    # y = scaler.transform(y)
-    # scale handling from paper
-    # y = y / np.mean(y, axis=1).reshape((-1, 1))  
-    num_samples, num_features, num_periods = X.shape
-    sample_idx = np.argmax(np.sum(y, axis=1))
-    # num_periods = 200
-    X = np.repeat(X[sample_idx, :, :num_periods].reshape((-1, num_features, num_periods)), 100, axis=0)
-    y = np.repeat(y[sample_idx, :num_periods].reshape((-1, num_periods)), 100, axis=0)
-    # X = X[:, :, :num_periods].reshape((-1, num_features, num_periods))
-    # y = y[::, :num_periods].reshape((-1, num_periods))
-    epoches = 100
-    step_per_epoch = 5
-    losses = train(X, y, epoches, step_per_epoch, n_layers=3, seq_len=30)
-    plt.plot(range(len(losses)), losses, "k-")
-    plt.show()
