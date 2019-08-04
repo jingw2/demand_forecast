@@ -136,16 +136,6 @@ def batch_generator(X, y, num_obs_to_train, seq_len):
     yf = y[t:t+seq_len]
     return X_train_batch, y_train_batch, Xf, yf
 
-def train_test_split(X, y, train_ratio=0.7):
-    num_periods, num_features = X.shape
-    train_periods = int(num_periods * train_ratio)
-    random.seed(2)
-    Xtr = X[:train_periods]
-    ytr = y[:train_periods]
-    Xte = X[train_periods:]
-    yte = y[train_periods:]
-    return Xtr, ytr, Xte, yte
-
 def train(
     X, 
     y,
@@ -164,15 +154,17 @@ def train(
         args.decoder_hidden_size
         )
     optimizer = Adam(model.parameters(), lr=args.lr)
-    Xtr, ytr, Xte, yte = train_test_split(X, y)
+    Xtr, ytr, Xte, yte = util.train_test_split(X, y)
     losses = []
+    yscaler = None
     if args.standard_scaler:
         yscaler = util.StandardScaler()
     elif args.log_scaler:
         yscaler = util.LogScaler()
     elif args.mean_scaler:
         yscaler = util.MeanScaler()
-    ytr = yscaler.fit_transform(ytr)
+    if yscaler is not None:
+        ytr = yscaler.fit_transform(ytr)
     num_obs_to_train = args.num_obs_to_train
     seq_len = args.seq_len
     for epoch in range(args.num_epoches):
@@ -203,11 +195,13 @@ def train(
     X_test = Xte[-seq_len-num_obs_to_train:-seq_len].reshape((-1, num_features))
     Xf_test = Xte[-seq_len:].reshape((-1, num_features))
     y_test = yte[-seq_len-num_obs_to_train:-seq_len].reshape((-1, 1))
-    y_test = yscaler.transform(y_test)
+    if yscaler is not None:
+        y_test = yscaler.transform(y_test)
     yf_test = yte[-seq_len:]
     ypred = model(X_test, y_test, Xf_test) # (1, num_quantiles, output_horizon)
     ypred = ypred.data.numpy()
-    ypred = yscaler.inverse_transform(ypred)
+    if yscaler is not None:
+        ypred = yscaler.inverse_transform(ypred)
     ypred = np.maximum(0, ypred)
 
     mape = util.MAPE(yf_test, ypred[:, 1])
