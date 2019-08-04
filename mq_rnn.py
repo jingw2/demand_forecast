@@ -43,8 +43,8 @@ class Decoder(nn.Module):
     def forward(self, ht, xf):
         '''
         Args:
-        ht (tensor): (batch_size, 1, hidden_size)
-        xf (tensor): (batch_size, output_horizon, hidden_size)
+        ht (tensor): (1, hidden_size)
+        xf (tensor): (output_horizon, num_features)
         '''
         output_horizon, num_features = xf.size()
         _, hidden_size = ht.size()
@@ -85,8 +85,9 @@ class MQRNN(nn.Module):
         num_quantiles (int): number of quantiles interests, e.g. 0.25, 0.5, 0.75
         input_size (int): feature size
         embedding_size (int): embedding size
-        hidden_size (int): hidden size in layers
-        n_layers (int): number of layers used in model
+        encoder_hidden_size (int): hidden size in encoder
+        encoder_n_layers (int): encoder number of layers
+        decoder_hidden_size (int): hidden size in decoder
         '''
         super(MQRNN, self).__init__()
         self.output_horizon = output_horizon
@@ -113,12 +114,10 @@ class MQRNN(nn.Module):
         x = torch.cat([X, y], dim=1)
         x = x.unsqueeze(1)
         _, (h, c) = self.encoder(x)
-        # h = h.permute(1, 0, 2) # batch_size, num_layers, hidden_size
         ht = h[:, -1, :]
         # global mlp
         ht = F.relu(ht)
         ypred = self.decoder(ht, Xf)
-        # ypred = nn.Tanh()(ypred) # (-1, 1)
         return ypred
 
 def batch_generator(X, y, num_obs_to_train, seq_len):
@@ -141,7 +140,6 @@ def train_test_split(X, y, train_ratio=0.7):
     num_periods, num_features = X.shape
     train_periods = int(num_periods * train_ratio)
     random.seed(2)
-    # random_idx = random.sample(range(num_samples), 50)
     Xtr = X[:train_periods]
     ytr = y[:train_periods]
     Xte = X[train_periods:]
@@ -268,7 +266,6 @@ if __name__ == "__main__":
         y = np.asarray(data["MT_200"]).reshape((num_periods, 1))
         quantiles = [0.1, 0.5, 0.9]
         losses, mape_list = train(X, y, args, quantiles)
-        print("Average RSE in test skus: ", np.mean(mape_list))
         if args.show_plot:
             plt.plot(range(len(losses)), losses, "k-")
             plt.xlabel("Period")
