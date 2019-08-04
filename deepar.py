@@ -42,20 +42,11 @@ class GaussianLikelihood(nn.Module):
         # nn.init.xavier_uniform_(self.sigma_layer.weight)
     
     def forward(self, h):
-        n_layers, seq_len, hidden_size = h.size()
-        mu = []
-        sigma = []
-        for s in range(seq_len):
-            ht = h[-1, s, :]
-            sigma_t = torch.log(1 + torch.exp(self.sigma_layer(ht))) + 1e-6
-            sigma_t = sigma_t.unsqueeze(0)
-            mu_t = self.mu_layer(ht).unsqueeze(0)
-            mu.append(mu_t)
-            sigma.append(sigma_t)
-        mu = torch.cat(mu, dim=0)
-        # avoid zero by adding small value
-        sigma = torch.cat(sigma, dim=0)
-        return mu, sigma
+        _, hidden_size = h.size()
+        sigma_t = torch.log(1 + torch.exp(self.sigma_layer(h))) + 1e-6
+        sigma_t = sigma_t.squeeze(0)
+        mu_t = self.mu_layer(h).squeeze(0)
+        return mu_t, sigma_t
 
 class NegativeBinomial(nn.Module):
 
@@ -71,23 +62,12 @@ class NegativeBinomial(nn.Module):
         self.sigma_layer = nn.Linear(input_size, output_size)
     
     def forward(self, h):
-        n_layers, seq_len, hidden_size = h.size()
-        mu = []
-        alpha = []
-        for s in range(seq_len):
-            ht = h[-1, s, :]
-            alpha_t = torch.log(1 + torch.exp(self.sigma_layer(ht))) + 1e-6
-            alpha_t = alpha_t.view(1, -1)
-            mu_t = torch.log(1 + torch.exp(self.mu_layer(ht)))
-            mu_t = mu_t.view(1, -1)
-            mu.append(mu_t)
-            alpha.append(alpha_t)
-        mu = torch.cat(mu, dim=0)
-        # avoid zero by adding small value
-        alpha = torch.cat(alpha, dim=0)
-        return mu, alpha
+        _, hidden_size = h.size()
+        alpha_t = torch.log(1 + torch.exp(self.sigma_layer(h))) + 1e-6
+        mu_t = torch.log(1 + torch.exp(self.mu_layer(h)))
+        return mu_t, alpha_t
 
-def gaussian_loss(ytrue, mu, sigma):
+def gaussian_likelihood(ytrue, mu, sigma):
     '''
     Gaussian Loss Functions -log P(y|X)
     Args:
@@ -97,16 +77,12 @@ def gaussian_loss(ytrue, mu, sigma):
 
     gaussian maximum likelihood using log 
         l_{G} (z|mu, sigma) = (2 * pi * sigma^2)^(-0.5) * exp(- (z - mu)^2 / (2 * sigma^2))
-
-    multiplication to sum 
-        - log l_{G} (z|mu, sigma) = 0.5 * log (2 * pi * sigma^2) + 0.5 * (z - mu)^2 / sigma^2
     '''
-    loss = torch.log(sigma) + \
-            0.5 * (ytrue - mu) * (ytrue - mu) / (sigma * sigma) + 20
+    likelihood = (2 * np.pi * sigma ** 2) ** (-0.5) * \
+            torch.exp((- (ytrue - mu) ** 2) / (2 * sigma ** 2))
+    return likelihood
 
-    return loss.mean()
-
-def negative_binomial_loss(ytrue, mu, alpha):
+def negative_binomial_likelihood(ytrue, mu, alpha):
     '''
     Negative Binomial Loss
     Args:
@@ -115,7 +91,7 @@ def negative_binomial_loss(ytrue, mu, alpha):
     alpha (array like)
 
     maximuze log l_{nb} = log Gamma(z + 1/alpha) - log Gamma(z + 1) - log Gamma(1 / alpha)
-                - 1 / alpha * log (1 + alpha * mu) + z log (alpha * mu / (1 + alpha * mu))
+                - 1 / alpha * log (1 + alpha * mu) + z * log (alpha * mu / (1 + alpha * mu))
 
     minimize loss = - log l_{nb}
 
@@ -125,7 +101,7 @@ def negative_binomial_loss(ytrue, mu, alpha):
     likelihood = torch.lgamma(ytrue + 1. / alpha) - torch.lgamma(ytrue + 1) - torch.lgamma(1. / alpha) \
         - 1. / alpha * torch.log(1 + alpha * mu) \
         + ytrue * torch.log(alpha * mu / (1 + alpha * mu))
-    return -likelihood.mean()
+    return torch.exp(likelihood)
 
 class DeepAR(nn.Module):
 
@@ -141,70 +117,69 @@ class DeepAR(nn.Module):
         elif likelihood == "nb":
             self.likelihood_layer = NegativeBinomial(hidden_size, 1)
         self.likelihood = likelihood
-        # self.decoder = nn.LSTM(embedding_size, hidden_size, num_layers, bias=True, batch_first=True)
     
-    def forward(self, X, y):
+    def forward(self, X, y, Xf):
         '''
         Args:
-        X (array like): shape (seq, input_size)
-        X (array like): shape (seq, 1)
+        X (array like): shape (seq_len, input_size)
+        y (array like): shape (seq, 1)
         Return:
         mu (array like): shape (batch_size, seq_len)
         sigma (array like): shape (batch_size, seq_len)
         '''
-        y = self.input_embed(y)
-        x = torch.cat([X, y], dim=1)
-        x = x.unsqueeze(1)
-        out, (h, c) = self.encoder(x) # h size (batch_size, num_layers, hidden_size)
-        mu, sigma = self.likelihood_layer(h)
-        return mu, sigma
-    
-    def predict(self, X, y):
-        '''
-        Predict 
-        Args:
-        X (array like): shape (batch_size, seq_len, num_features)
-        '''
-        if type(X) == type(np.empty((1, 1))):
+        if isinstance(X, type(np.empty(2))):
             X = torch.from_numpy(X).float()
             y = torch.from_numpy(y).float()
-        seq_len, num_features = X.size()
-        mu, sigma = self.forward(X, y)
+            Xf = torch.from_numpy(Xf).float()
+        seq_len, _ = X.size()
+        output_horizon, num_features = Xf.size()
+        ynext = None
         ypred = []
-        for sl in range(seq_len):
+        for s in range(seq_len + output_horizon):
+            if s < seq_len:
+                ynext = y[s, :].view(-1, 1)
+                yembed = self.input_embed(ynext).view(1, -1)
+                x = X[s, :].view(1, -1)
+            else:
+                yembed = self.input_embed(ynext).view(1, -1)
+                x = Xf[s-seq_len, :].view(1, -1)
+            x = torch.cat([x, yembed], dim=1)
+            inp = x.unsqueeze(0)
+            out, (hs, c) = self.encoder(inp) # h size (num_layers, 1, hidden_size)
+            hs = hs[-1, :, :]
+            mu, sigma = self.likelihood_layer(hs)
             if self.likelihood == "g":
-                dist = torch.distributions.Normal(loc=mu[sl, :].reshape((-1, 1)), \
-                        scale=sigma[sl, :].reshape((-1, 1)))
-                ypred.append(dist.sample())
+                ynext = gaussian_likelihood(ynext, mu, sigma)
             elif self.likelihood == "nb":
-                alpha_t = sigma[sl, :].view((1, -1))
-                mu_t = mu[sl, :].view((1, -1))
-                r = 1. / alpha_t.detach()
-                p = r / (r + mu_t.detach())
-                dist = torch.distributions.NegativeBinomial(r, p)
-                sample_data = dist.sample()
-                ypred.append(sample_data)
-        ypred = torch.cat(ypred, dim=0).view(1, seq_len)
+                alpha_t = sigma
+                mu_t = mu
+                ynext = negative_binomial_likelihood(ynext, mu_t, alpha_t)
+            if s >= seq_len - 1 and s < output_horizon + seq_len - 1:
+                ypred.append(ynext)
+        ypred = torch.cat(ypred, dim=1).view(-1, 1)
         return ypred
-
-def batch_generator(X, y, seq_len):
+    
+def batch_generator(X, y, num_obs_to_train, seq_len):
     '''
     Args:
     X (array like): shape (num_samples, num_features, num_periods)
     y (array like): shape (num_samples, num_periods)
+    num_obs_to_train (int):
     seq_len (int): sequence/encoder/decoder length
     '''
     num_periods, _ = X.shape
-    t = random.choice(range(1, num_periods-seq_len))
-    Xtrain = X[t:t+seq_len]
-    ytrain = y[t-1:t+seq_len-1]
+    t = random.choice(range(num_obs_to_train, num_periods-seq_len))
+    X_train_batch = X[t-num_obs_to_train:t]
+    y_train_batch = y[t-num_obs_to_train:t]
+    Xf = X[t:t+seq_len]
     yf = y[t:t+seq_len]
-    return Xtrain, ytrain, yf
+    return X_train_batch, y_train_batch, Xf, yf
 
 def train(
     X, 
     y,
-    args
+    args,
+    rho=0.5
     ):
     '''
     Args:
@@ -234,21 +209,24 @@ def train(
         yscaler = util.LogScaler()
     elif args.mean_scaler:
         yscaler = util.MeanScaler()
-    ytr = yscaler.fit_transform(ytr)
+    if yscaler is not None:
+        ytr = yscaler.fit_transform(ytr)
 
     # training
     seq_len = args.seq_len
+    num_obs_to_train = args.num_obs_to_train
     for epoch in range(args.num_epoches):
         print("Epoch {} starts...".format(epoch))
         for step in tqdm(range(args.step_per_epoch)):
-            Xtrain, ytrain, yf = batch_generator(Xtr, ytr, seq_len)
+            Xtrain, ytrain, Xf, yf = batch_generator(Xtr, ytr, num_obs_to_train, seq_len)
             Xtrain_tensor = torch.from_numpy(Xtrain).float()
-            ytrain_tensor = torch.from_numpy(ytrain).float()  
-            mu, sigma = model(Xtrain_tensor, ytrain_tensor)
-            if args.likelihood == "g":
-                loss = gaussian_loss(ytrain_tensor, mu, sigma)
-            elif args.likelihood == "nb":
-                loss = negative_binomial_loss(ytrain_tensor, mu, sigma)
+            ytrain_tensor = torch.from_numpy(ytrain).float()
+            Xf = torch.from_numpy(Xf).float()  
+            yf = torch.from_numpy(yf).float()
+            ypred = model(Xtrain_tensor, ytrain_tensor, Xf)
+            ypred_rho = ypred.view(-1, 1)
+            e = ypred_rho - yf
+            loss = torch.max(rho * e, (rho - 1) * e).mean()
             losses.append(loss.item())
             optimizer.zero_grad()
             loss.backward()
@@ -258,35 +236,31 @@ def train(
     # test 
     mape_list = []
     # select skus with most top K
-    X_test = Xte[1:].reshape((-1, num_features))
-    yf = yte[:-1].reshape((-1, 1))
-    y_test = yte[1:].reshape((-1, 1))
-    y_pred_list = []
-    for t in tqdm(range(args.num_results_to_sample)):
+    X_test = Xte[-seq_len-num_obs_to_train:-seq_len].reshape((-1, num_features))
+    Xf_test = Xte[-seq_len:].reshape((-1, num_features))
+    y_test = yte[-seq_len-num_obs_to_train:-seq_len].reshape((-1, 1))
+    yf_test = yte[-seq_len:]
+    if yscaler is not None:
         y_test = yscaler.transform(y_test)
-        y_pred = model.predict(X_test, y_test)
-        y_pred = y_pred.data.numpy().ravel()
+    y_pred = model(X_test, y_test, Xf_test)
+    y_pred = y_pred.data.numpy().ravel()
+    if yscaler is not None:
         y_pred = yscaler.inverse_transform(y_pred)
-        y_pred_list.append(y_pred)
-    tot_res = pd.DataFrame(y_pred_list).T
-    tot_res['mu'] = tot_res.apply(lambda x: np.mean(x), axis=1)
-
-    mape = util.MAPE(yf, tot_res.mu)
+    
+    mape = util.MAPE(yf_test, y_pred)
     print("MAPE: {}".format(mape))
     mape_list.append(mape)
 
-    tot_res['upper'] = tot_res.apply(lambda x: np.mean(x) + np.std(x), axis=1)
-    tot_res['lower'] = tot_res.apply(lambda x: np.mean(x) - np.std(x), axis=1)
-    tot_res['two_upper'] = tot_res.apply(lambda x: np.mean(x) + 2*np.std(x), axis=1)
-    tot_res['two_lower'] = tot_res.apply(lambda x: np.mean(x) - 2*np.std(x), axis=1)
     if args.show_plot:
         plt.figure(1)
-        plt.plot([i for i in range(len(tot_res))], tot_res.mu, 'r-', linewidth=2)
-        # plt.fill_between(x=tot_res.index, y1=tot_res.lower, y2=tot_res.upper, alpha=0.5)
-        # plt.fill_between(x=tot_res.index, y1=tot_res.two_lower, y2=tot_res.two_upper, alpha=0.5)
+        plt.plot([k + seq_len + num_obs_to_train - seq_len \
+            for k in range(seq_len)], y_pred, "r-")
         plt.title('Prediction uncertainty')
-        plt.plot(range(len(yf)), yf, "k-")
-        plt.legend(["prediction", "true"])
+        yplot = yte[-seq_len-num_obs_to_train:]
+        plt.plot(range(len(yplot)), yplot, "k-")
+        plt.legend(["P50 forecast", "true", "P10-P90 quantile"], loc="upper left")
+        plt.xlabel("Periods")
+        plt.ylabel("Y")
         plt.show()
     return losses, mape_list
 
@@ -294,15 +268,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_epoches", "-e", type=int, default=1000)
     parser.add_argument("--step_per_epoch", "-spe", type=int, default=2)
-    parser.add_argument("--num_periods", "-np", type=int, default=100)
     parser.add_argument("-lr", type=float, default=1e-3)
     parser.add_argument("--n_layers", "-nl", type=int, default=3)
-    parser.add_argument("--batch_size", "-b", type=int, default=64)
     parser.add_argument("--hidden_size", "-hs", type=int, default=64)
     parser.add_argument("--embedding_size", "-es", type=int, default=64)
     parser.add_argument("--likelihood", "-l", type=str, default="g")
     parser.add_argument("--seq_len", "-sl", type=int, default=7)
-    parser.add_argument("--num_obs_to_train", "-not", type=int, default=168)
+    parser.add_argument("--num_obs_to_train", "-not", type=int, default=1)
     parser.add_argument("--num_results_to_sample", "-nrs", type=int, default=10)
     parser.add_argument("--show_plot", "-sp", action="store_true")
     parser.add_argument("--run_test", "-rt", action="store_true")
