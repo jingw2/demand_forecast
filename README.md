@@ -14,4 +14,8 @@ Please install [Pytorch](https://pytorch.org/) before run it, and
 # Reference
 * [DeepAR](https://arxiv.org/abs/1704.04110)
 * [MQ-RNN](https://arxiv.org/abs/1711.11053)
+* [Deep Factor](https://arxiv.org/pdf/1905.12417.pdf)
+* [LSTNet](https://arxiv.org/abs/1703.07015)
+* [TPA-LSTM](https://arxiv.org/pdf/1809.04206v2.pdf)
 * [LSTNet Github](https://github.com/laiguokun/LSTNet)
+* [TPA-LSTM Github](https://github.com/gantheory/TPA-LSTM)
