@@ -48,7 +48,7 @@ class Decoder(nn.Module):
         '''
         output_horizon, num_features = xf.size()
         _, hidden_size = ht.size()
-        ht = ht.expand(output_horizon, -1)
+        ht = ht.expand(output_horizon, hidden_size)
         # inp = (xf + ht).view(batch_size, -1) # batch_size, hidden_size, output_horizon
         inp = torch.cat([xf, ht], dim=1).view(1, -1)
         contexts = self.global_mlp(inp)
@@ -114,7 +114,7 @@ class MQRNN(nn.Module):
         x = torch.cat([X, y], dim=1)
         x = x.unsqueeze(1)
         _, (h, c) = self.encoder(x)
-        ht = h[:, -1, :]
+        ht = h[-1, -:, :]
         # global mlp
         ht = F.relu(ht)
         ypred = self.decoder(ht, Xf)
