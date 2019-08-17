@@ -114,7 +114,7 @@ class MQRNN(nn.Module):
         x = torch.cat([X, y], dim=1)
         x = x.unsqueeze(1)
         _, (h, c) = self.encoder(x)
-        ht = h[-1, -:, :]
+        ht = h[-1, :, :]
         # global mlp
         ht = F.relu(ht)
         ypred = self.decoder(ht, Xf)
