@@ -46,24 +46,25 @@ class Decoder(nn.Module):
         ht (tensor): (1, hidden_size)
         xf (tensor): (output_horizon, num_features)
         '''
-        output_horizon, num_features = xf.size()
-        _, hidden_size = ht.size()
-        ht = ht.expand(output_horizon, hidden_size)
+        num_ts, output_horizon, num_features = xf.size()
+        num_ts, hidden_size = ht.size()
+        ht = ht.unsqueeze(1)
+        ht = ht.expand(num_ts, output_horizon, hidden_size)
         # inp = (xf + ht).view(batch_size, -1) # batch_size, hidden_size, output_horizon
-        inp = torch.cat([xf, ht], dim=1).view(1, -1)
+        inp = torch.cat([xf, ht], dim=2).view(num_ts, -1)
         contexts = self.global_mlp(inp)
-        contexts = contexts.view(output_horizon+1, self.decoder_hidden_size)
-        ca = contexts[-1, :].view(1, -1)
-        C = contexts[:-1, :]
+        contexts = contexts.view(num_ts, output_horizon+1, self.decoder_hidden_size)
+        ca = contexts[:, -1, :].view(num_ts, -1)
+        C = contexts[:, :-1, :]
         C = F.relu(C)
         y = []
         for i in range(output_horizon):
-            ci = C[i, :].view(1, -1)
-            xfi = xf[i, :].view(1, -1)
+            ci = C[:, i, :].view(num_ts, -1)
+            xfi = xf[:, i, :].view(num_ts, -1)
             inp = torch.cat([xfi, ci, ca], dim=1)
-            out = self.local_mlp(inp)
-            y.append(out)
-        y = torch.cat(y, dim=0) # batch_size, output_horizon, quantiles
+            out = self.local_mlp(inp) # num_ts, num_quantiles
+            y.append(out.unsqueeze(1))
+        y = torch.cat(y, dim=1) # batch_size, output_horizon, quantiles
         return y 
 
 
@@ -101,18 +102,19 @@ class MQRNN(nn.Module):
     def forward(self, X, y, Xf):
         '''
         Args:
-        X (tensor like): shape (num_periods, num_features)
-        y (tensor like): shape (num_periods, 1)
-        Xf (tensor like): shape (seq_len, num_features)
+        X (tensor like): shape (num_time_series, num_periods, num_features)
+        y (tensor like): shape (num_time_series, num_periods)
+        Xf (tensor like): shape (num_time_series, seq_len, num_features)
         '''
         if isinstance(X, type(np.empty(2))):
             X = torch.from_numpy(X).float()
             y = torch.from_numpy(y).float()
             Xf = torch.from_numpy(Xf).float()
-        num_periods, num_features = X.shape
+        num_ts, num_periods, num_features = X.size()
+        y = y.unsqueeze(2)
         y = self.input_embed(y)
-        x = torch.cat([X, y], dim=1)
-        x = x.unsqueeze(1)
+        x = torch.cat([X, y], dim=2)
+        # x = x.unsqueeze(0) # batch, seq_len, embed + num_features
         _, (h, c) = self.encoder(x)
         ht = h[-1, :, :]
         # global mlp
@@ -120,7 +122,7 @@ class MQRNN(nn.Module):
         ypred = self.decoder(ht, Xf)
         return ypred
 
-def batch_generator(X, y, num_obs_to_train, seq_len):
+def batch_generator(X, y, num_obs_to_train, seq_len, batch_size):
     '''
     Args:
     X (array like): shape (num_samples, num_features, num_periods)
@@ -128,12 +130,15 @@ def batch_generator(X, y, num_obs_to_train, seq_len):
     num_obs_to_train (int)
     seq_len (int): sequence/encoder/decoder length
     '''
-    num_periods, _ = X.shape
+    num_ts, num_periods, _ = X.shape
+    if num_ts < batch_size:
+        batch_size = num_ts
     t = random.choice(range(num_obs_to_train, num_periods-seq_len))
-    X_train_batch = X[t-num_obs_to_train:t]
-    y_train_batch = y[t-num_obs_to_train:t]
-    Xf = X[t:t+seq_len]
-    yf = y[t:t+seq_len]
+    batch = random.sample(range(num_ts), batch_size)
+    X_train_batch = X[batch, t-num_obs_to_train:t, :]
+    y_train_batch = y[batch, t-num_obs_to_train:t]
+    Xf = X[batch, t:t+seq_len, :]
+    yf = y[batch, t:t+seq_len]
     return X_train_batch, y_train_batch, Xf, yf
 
 def train(
@@ -142,7 +147,7 @@ def train(
     args,
     quantiles
     ):
-    num_periods, num_features = X.shape
+    num_ts, num_periods, num_features = X.shape
     num_quantiles = len(quantiles)
     model = MQRNN(
         args.seq_len, 
@@ -167,11 +172,11 @@ def train(
         ytr = yscaler.fit_transform(ytr)
     num_obs_to_train = args.num_obs_to_train
     seq_len = args.seq_len
-    for epoch in range(args.num_epoches):
+    for epoch in tqdm(range(args.num_epoches)):
         print("Epoch {} start...".format(epoch))
-        for step in tqdm(range(args.step_per_epoch)):
+        for step in range(args.step_per_epoch):
             X_train_batch, y_train_batch, Xf, yf = batch_generator(Xtr, ytr, 
-                    num_obs_to_train, args.seq_len)
+                    num_obs_to_train, args.seq_len, args.batch_size)
             X_train_tensor = torch.from_numpy(X_train_batch).float()
             y_train_tensor = torch.from_numpy(y_train_batch).float() 
             Xf = torch.from_numpy(Xf).float()
@@ -180,8 +185,9 @@ def train(
         
             # quantile loss
             loss = torch.zeros_like(yf)
+            num_ts = Xf.size(0)
             for q, rho in enumerate(quantiles):
-                ypred_rho = ypred[:, q].view(-1, 1)
+                ypred_rho = ypred[:, :, q].view(num_ts, -1)
                 e = ypred_rho - yf
                 loss += torch.max(rho * e, (rho - 1) * e)
             loss = loss.mean()
@@ -192,30 +198,32 @@ def train(
             optimizer.step()
     
     mape_list = []
-    X_test = Xte[-seq_len-num_obs_to_train:-seq_len].reshape((-1, num_features))
-    Xf_test = Xte[-seq_len:].reshape((-1, num_features))
-    y_test = yte[-seq_len-num_obs_to_train:-seq_len].reshape((-1, 1))
+    X_test = Xte[:, -seq_len-num_obs_to_train:-seq_len, :].reshape((num_ts, -1, num_features))
+    Xf_test = Xte[:, -seq_len:, :].reshape((num_ts, -1, num_features))
+    y_test = yte[:, -seq_len-num_obs_to_train:-seq_len].reshape((num_ts, -1))
     if yscaler is not None:
         y_test = yscaler.transform(y_test)
-    yf_test = yte[-seq_len:]
+    yf_test = yte[:, -seq_len:]
     ypred = model(X_test, y_test, Xf_test) # (1, num_quantiles, output_horizon)
     ypred = ypred.data.numpy()
     if yscaler is not None:
         ypred = yscaler.inverse_transform(ypred)
     ypred = np.maximum(0, ypred)
 
-    mape = util.MAPE(yf_test, ypred[:, 1])
+    # P50 quantile MAPE 
+    mape = util.MAPE(yf_test, ypred[:, :, 1])
     print("MAPE: {}".format(mape))
     mape_list.append(mape)
 
     if args.show_plot:
+        show_idx = 0
         plt.figure(1)
         plt.plot([k + seq_len + num_obs_to_train - seq_len \
-            for k in range(seq_len)], ypred[:, 1], "r-")
+            for k in range(seq_len)], ypred[show_idx, :, 1], "r-")
         plt.fill_between(x=[k + seq_len + num_obs_to_train - seq_len for k in range(seq_len)], \
-            y1=ypred[:, 0], y2=ypred[:, 2], alpha=0.5)
+            y1=ypred[show_idx, :, 0], y2=ypred[show_idx, :, 2], alpha=0.5)
         plt.title('Prediction uncertainty')
-        yplot = yte[-seq_len-num_obs_to_train:]
+        yplot = yte[show_idx, -seq_len-num_obs_to_train:]
         plt.plot(range(len(yplot)), yplot, "k-")
         plt.legend(["P50 forecast", "true", "P10-P90 quantile"], loc="upper left")
         plt.xlabel("Periods")
@@ -239,6 +247,7 @@ if __name__ == "__main__":
     parser.add_argument("--mean_scaler", "-ms", action="store_true")
     parser.add_argument("--show_plot", "-sp", action="store_true")
     parser.add_argument("--run_test", "-rt", action="store_true")
+    parser.add_argument("--batch_size", "-b", type=int, default=64)
     args = parser.parse_args()
 
     if args.run_test:
@@ -256,8 +265,8 @@ if __name__ == "__main__":
         X = np.c_[np.asarray(hours), np.asarray(dows)]
         num_features = X.shape[1]
         num_periods = len(data)
-        X = np.asarray(X).reshape((num_periods, num_features))
-        y = np.asarray(data["MT_200"]).reshape((num_periods, 1))
+        X = np.asarray(X).reshape((-1, num_periods, num_features))
+        y = np.asarray(data["MT_200"]).reshape((-1, num_periods))
         quantiles = [0.1, 0.5, 0.9]
         losses, mape_list = train(X, y, args, quantiles)
         if args.show_plot:
