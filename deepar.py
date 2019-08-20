@@ -121,8 +121,8 @@ class DeepAR(nn.Module):
     def forward(self, X, y, Xf):
         '''
         Args:
-        X (array like): shape (seq_len, input_size)
-        y (array like): shape (seq, 1)
+        X (array like): shape (num_time_series, seq_len, input_size)
+        y (array like): shape (num_time_series, seq_len)
         Return:
         mu (array like): shape (batch_size, seq_len)
         sigma (array like): shape (batch_size, seq_len)
@@ -131,22 +131,23 @@ class DeepAR(nn.Module):
             X = torch.from_numpy(X).float()
             y = torch.from_numpy(y).float()
             Xf = torch.from_numpy(Xf).float()
-        seq_len, _ = X.size()
-        output_horizon, num_features = Xf.size()
+        num_ts, seq_len, _ = X.size()
+        _, output_horizon, num_features = Xf.size()
         ynext = None
         ypred = []
         for s in range(seq_len + output_horizon):
             if s < seq_len:
-                ynext = y[s, :].view(-1, 1)
-                yembed = self.input_embed(ynext).view(1, -1)
-                x = X[s, :].view(1, -1)
+                ynext = y[:, s].view(-1, 1)
+                yembed = self.input_embed(ynext).view(num_ts, -1)
+                x = X[:, s, :].view(num_ts, -1)
             else:
-                yembed = self.input_embed(ynext).view(1, -1)
-                x = Xf[s-seq_len, :].view(1, -1)
-            x = torch.cat([x, yembed], dim=1)
-            inp = x.unsqueeze(0)
-            out, (hs, c) = self.encoder(inp) # h size (num_layers, 1, hidden_size)
+                yembed = self.input_embed(ynext).view(num_ts, -1)
+                x = Xf[:, s-seq_len, :].view(num_ts, -1)
+            x = torch.cat([x, yembed], dim=1) # num_ts, num_features + embedding
+            inp = x.unsqueeze(1)
+            out, (hs, c) = self.encoder(inp) # h size (num_layers, num_ts, hidden_size)
             hs = hs[-1, :, :]
+            hs = F.relu(hs)
             mu, sigma = self.likelihood_layer(hs)
             if self.likelihood == "g":
                 ynext = gaussian_likelihood(ynext, mu, sigma)
@@ -154,32 +155,36 @@ class DeepAR(nn.Module):
                 alpha_t = sigma
                 mu_t = mu
                 ynext = negative_binomial_likelihood(ynext, mu_t, alpha_t)
+            # if without true value, use prediction
             if s >= seq_len - 1 and s < output_horizon + seq_len - 1:
                 ypred.append(ynext)
-        ypred = torch.cat(ypred, dim=1).view(-1, 1)
+        ypred = torch.cat(ypred, dim=1).view(num_ts, -1)
         return ypred
     
-def batch_generator(X, y, num_obs_to_train, seq_len):
+def batch_generator(X, y, num_obs_to_train, seq_len, batch_size):
     '''
     Args:
     X (array like): shape (num_samples, num_features, num_periods)
     y (array like): shape (num_samples, num_periods)
     num_obs_to_train (int):
     seq_len (int): sequence/encoder/decoder length
+    batch_size (int)
     '''
-    num_periods, _ = X.shape
+    num_ts, num_periods, _ = X.shape
+    if num_ts < batch_size:
+        batch_size = num_ts
     t = random.choice(range(num_obs_to_train, num_periods-seq_len))
-    X_train_batch = X[t-num_obs_to_train:t]
-    y_train_batch = y[t-num_obs_to_train:t]
-    Xf = X[t:t+seq_len]
-    yf = y[t:t+seq_len]
+    batch = random.sample(range(num_ts), batch_size)
+    X_train_batch = X[batch, t-num_obs_to_train:t, :]
+    y_train_batch = y[batch, t-num_obs_to_train:t]
+    Xf = X[batch, t:t+seq_len]
+    yf = y[batch, t:t+seq_len]
     return X_train_batch, y_train_batch, Xf, yf
 
 def train(
     X, 
     y,
-    args,
-    rho=0.5
+    args
     ):
     '''
     Args:
@@ -192,7 +197,8 @@ def train(
     - num_skus_to_show (int): how many skus to show in test phase
     - num_results_to_sample (int): how many samples in test phase as prediction
     '''
-    num_periods, num_features = X.shape
+    rho = args.quantile
+    num_ts, num_periods, num_features = X.shape
     model = DeepAR(num_features, args.embedding_size, 
         args.hidden_size, args.n_layers, args.lr, args.likelihood)
     optimizer = Adam(model.parameters(), lr=args.lr)
@@ -215,16 +221,16 @@ def train(
     # training
     seq_len = args.seq_len
     num_obs_to_train = args.num_obs_to_train
-    for epoch in range(args.num_epoches):
+    for epoch in tqdm(range(args.num_epoches)):
         print("Epoch {} starts...".format(epoch))
-        for step in tqdm(range(args.step_per_epoch)):
-            Xtrain, ytrain, Xf, yf = batch_generator(Xtr, ytr, num_obs_to_train, seq_len)
+        for step in range(args.step_per_epoch):
+            Xtrain, ytrain, Xf, yf = batch_generator(Xtr, ytr, num_obs_to_train, seq_len, args.batch_size)
             Xtrain_tensor = torch.from_numpy(Xtrain).float()
             ytrain_tensor = torch.from_numpy(ytrain).float()
             Xf = torch.from_numpy(Xf).float()  
             yf = torch.from_numpy(yf).float()
             ypred = model(Xtrain_tensor, ytrain_tensor, Xf)
-            ypred_rho = ypred.view(-1, 1)
+            ypred_rho = ypred
             e = ypred_rho - yf
             loss = torch.max(rho * e, (rho - 1) * e).mean()
             losses.append(loss.item())
@@ -236,14 +242,14 @@ def train(
     # test 
     mape_list = []
     # select skus with most top K
-    X_test = Xte[-seq_len-num_obs_to_train:-seq_len].reshape((-1, num_features))
-    Xf_test = Xte[-seq_len:].reshape((-1, num_features))
-    y_test = yte[-seq_len-num_obs_to_train:-seq_len].reshape((-1, 1))
-    yf_test = yte[-seq_len:]
+    X_test = Xte[:, -seq_len-num_obs_to_train:-seq_len, :].reshape((num_ts, -1, num_features))
+    Xf_test = Xte[:, -seq_len:, :].reshape((num_ts, -1, num_features))
+    y_test = yte[:, -seq_len-num_obs_to_train:-seq_len].reshape((num_ts, -1))
+    yf_test = yte[:, -seq_len:].reshape((num_ts, -1))
     if yscaler is not None:
         y_test = yscaler.transform(y_test)
     y_pred = model(X_test, y_test, Xf_test)
-    y_pred = y_pred.data.numpy().ravel()
+    y_pred = y_pred.data.numpy()
     if yscaler is not None:
         y_pred = yscaler.inverse_transform(y_pred)
     
@@ -254,9 +260,9 @@ def train(
     if args.show_plot:
         plt.figure(1)
         plt.plot([k + seq_len + num_obs_to_train - seq_len \
-            for k in range(seq_len)], y_pred, "r-")
+            for k in range(seq_len)], y_pred[-1], "r-")
         plt.title('Prediction uncertainty')
-        yplot = yte[-seq_len-num_obs_to_train:]
+        yplot = yte[-1, -seq_len-num_obs_to_train:]
         plt.plot(range(len(yplot)), yplot, "k-")
         plt.legend(["P50 forecast", "true", "P10-P90 quantile"], loc="upper left")
         plt.xlabel("Periods")
@@ -281,6 +287,8 @@ if __name__ == "__main__":
     parser.add_argument("--standard_scaler", "-ss", action="store_true")
     parser.add_argument("--log_scaler", "-ls", action="store_true")
     parser.add_argument("--mean_scaler", "-ms", action="store_true")
+    parser.add_argument("--batch_size", "-b", type=int, default=64)
+    parser.add_argument("--quantile", "-p", type=float, default=0.5)
 
     args = parser.parse_args()
 
@@ -299,8 +307,10 @@ if __name__ == "__main__":
         X = np.c_[np.asarray(hours), np.asarray(dows)]
         num_features = X.shape[1]
         num_periods = len(data)
-        X = np.asarray(X).reshape((num_periods, num_features))
-        y = np.asarray(data["MT_200"]).reshape((num_periods, 1))
+        X = np.asarray(X).reshape((-1, num_periods, num_features))
+        y = np.asarray(data["MT_200"]).reshape((-1, num_periods))
+        # X = np.tile(X, (10, 1, 1))
+        # y = np.tile(y, (10, 1))
         losses, mape_list = train(X, y, args)
         if args.show_plot:
             plt.plot(range(len(losses)), losses, "k-")
