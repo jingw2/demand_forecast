@@ -23,6 +23,7 @@ from sklearn.preprocessing import StandardScaler
 import util
 from datetime import date
 import argparse
+from progressbar import *
 
 class GaussianLikelihood(nn.Module):
 
@@ -221,8 +222,9 @@ def train(
     # training
     seq_len = args.seq_len
     num_obs_to_train = args.num_obs_to_train
-    for epoch in tqdm(range(args.num_epoches)):
-        print("Epoch {} starts...".format(epoch))
+    progress = ProgressBar()
+    for epoch in progress(range(args.num_epoches)):
+        # print("Epoch {} starts...".format(epoch))
         for step in range(args.step_per_epoch):
             Xtrain, ytrain, Xf, yf = batch_generator(Xtr, ytr, num_obs_to_train, seq_len, args.batch_size)
             Xtrain_tensor = torch.from_numpy(Xtrain).float()
