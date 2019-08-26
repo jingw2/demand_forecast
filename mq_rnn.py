@@ -24,6 +24,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from time import time
 import argparse
 from datetime import date
+from progressbar import *
 
 class Decoder(nn.Module):
 
@@ -172,8 +173,9 @@ def train(
         ytr = yscaler.fit_transform(ytr)
     num_obs_to_train = args.num_obs_to_train
     seq_len = args.seq_len
-    for epoch in tqdm(range(args.num_epoches)):
-        print("Epoch {} start...".format(epoch))
+    progress = ProgressBar()
+    for epoch in progress(range(args.num_epoches)):
+        # print("Epoch {} start...".format(epoch))
         for step in range(args.step_per_epoch):
             X_train_batch, y_train_batch, Xf, yf = batch_generator(Xtr, ytr, 
                     num_obs_to_train, args.seq_len, args.batch_size)
