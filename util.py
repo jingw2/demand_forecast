@@ -46,13 +46,13 @@ def MAPE(ytrue, ypred):
         / ytrue))
 
 def train_test_split(X, y, train_ratio=0.7):
-    num_periods, num_features = X.shape
+    num_ts, num_periods, num_features = X.shape
     train_periods = int(num_periods * train_ratio)
     random.seed(2)
-    Xtr = X[:train_periods]
-    ytr = y[:train_periods]
-    Xte = X[train_periods:]
-    yte = y[train_periods:]
+    Xtr = X[:, :train_periods, :]
+    ytr = y[:, :train_periods]
+    Xte = X[:, train_periods:, :]
+    yte = y[:, train_periods:]
     return Xtr, ytr, Xte, yte
 
 class StandardScaler:
@@ -91,3 +91,21 @@ class LogScaler:
 
     def transform(self, y):
         return np.log1p(y)
+
+
+def gaussian_likelihood_loss(z, mu, sigma):
+    '''
+    Gaussian Liklihood Loss
+    Args:
+    z (tensor): true observations, shape (num_ts, num_periods)
+    mu (tensor): mean, shape (num_ts, num_periods)
+    sigma (tensor): standard deviation, shape (num_ts, num_periods)
+
+    likelihood: 
+    (2 pi sigma^2)^(-1/2) exp(-(z - mu)^2 / (2 sigma^2))
+
+    log likelihood:
+    -1/2 * (log (2 pi) + 2 * log (sigma)) - (z - mu)^2 / (2 sigma^2)
+    '''
+    negative_likelihood = torch.log(sigma + 1) + (z - mu) ** 2 / (2 * sigma ** 2) + 6
+    return negative_likelihood.mean()
