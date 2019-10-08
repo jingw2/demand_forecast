@@ -136,6 +136,8 @@ class DeepAR(nn.Module):
         _, output_horizon, num_features = Xf.size()
         ynext = None
         ypred = []
+        mus = []
+        sigmas = []
         for s in range(seq_len + output_horizon):
             if s < seq_len:
                 ynext = y[:, s].view(-1, 1)
@@ -150,6 +152,8 @@ class DeepAR(nn.Module):
             hs = hs[-1, :, :]
             hs = F.relu(hs)
             mu, sigma = self.likelihood_layer(hs)
+            mus.append(mu.view(-1, 1))
+            sigmas.append(sigma.view(-1, 1))
             if self.likelihood == "g":
                 ynext = gaussian_likelihood(ynext, mu, sigma)
             elif self.likelihood == "nb":
@@ -160,7 +164,9 @@ class DeepAR(nn.Module):
             if s >= seq_len - 1 and s < output_horizon + seq_len - 1:
                 ypred.append(ynext)
         ypred = torch.cat(ypred, dim=1).view(num_ts, -1)
-        return ypred
+        mu = torch.cat(mus, dim=1).view(num_ts, -1)
+        sigma = torch.cat(sigmas, dim=1).view(num_ts, -1)
+        return ypred, mu, sigma
     
 def batch_generator(X, y, num_obs_to_train, seq_len, batch_size):
     '''
@@ -231,10 +237,13 @@ def train(
             ytrain_tensor = torch.from_numpy(ytrain).float()
             Xf = torch.from_numpy(Xf).float()  
             yf = torch.from_numpy(yf).float()
-            ypred = model(Xtrain_tensor, ytrain_tensor, Xf)
-            ypred_rho = ypred
-            e = ypred_rho - yf
-            loss = torch.max(rho * e, (rho - 1) * e).mean()
+            ypred, mu, sigma = model(Xtrain_tensor, ytrain_tensor, Xf)
+            # ypred_rho = ypred
+            # e = ypred_rho - yf
+            # loss = torch.max(rho * e, (rho - 1) * e).mean()
+            ## gaussian loss
+            ytrain_tensor = torch.cat([ytrain_tensor, yf], dim=1)
+            loss = util.gaussian_likelihood_loss(ytrain_tensor, mu, sigma)
             losses.append(loss.item())
             optimizer.zero_grad()
             loss.backward()
@@ -250,7 +259,7 @@ def train(
     yf_test = yte[:, -seq_len:].reshape((num_ts, -1))
     if yscaler is not None:
         y_test = yscaler.transform(y_test)
-    y_pred = model(X_test, y_test, Xf_test)
+    y_pred, _, _ = model(X_test, y_test, Xf_test)
     y_pred = y_pred.data.numpy()
     if yscaler is not None:
         y_pred = yscaler.inverse_transform(y_pred)
