@@ -6,8 +6,31 @@ Pytorch Implementation of DeepAR, MQ-RNN, Deep Factor Models, LSTNet, and TPA-LS
 Please install [Pytorch](https://pytorch.org/) before run it, and 
 
 ```python
-pip install -r requirements.txt
+pip install -r requirement.txt
 ```
+
+## Run tests
+```python
+# DeepAR
+pythonw deepar.py -e 100 -spe 3 -nl 1 -l g -not 168 -sp -rt -es 10 -hs 50  -sl 60 -ms
+
+# MQ-RNN
+pythonw mq_rnn.py -e 100 -spe 3 -nl 1 -sp -sl 72 -not 168 -rt -ehs 50 -dhs 20 -ss -es 10 -ms
+
+# Deep Factors
+pythonw deep_factors.py -e 100 -spe 3 -rt -not 168 -sp -sl 168 -ms
+```
+
+## Arguments
+|  Arguments   | Details  |
+|  ----  | ----  |
+| -e  | number of episodes |
+| -spe  | steps per episode |
+| -sl | sequence length |
+| -not | number of observations to train|
+| -ms | mean scaler on y|
+| -nl | number of layers|
+| -l | likelihood to select, "g" or "nb"|
 
 #### TO DO
 * [ ] Deep Factor Model
