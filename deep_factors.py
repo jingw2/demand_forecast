@@ -40,7 +40,7 @@ class DeepFactor(nn.Module):
         _, (h, c) = self.lstm(X)
         ht = h[-1, :, :] # num_ts, global factors
         ht = F.relu(ht)
-        gt = self.factor(ht)
+        gt = ht
         return gt.view(num_ts, -1)
 
 class Noise(nn.Module):
@@ -69,9 +69,9 @@ class DFRNN(nn.Module):
         self.noise = Noise(input_size, noise_hidden_size, noise_nlayers)
         self.global_factor = DeepFactor(input_size, global_nlayers, 
                     global_hidden_size, n_global_factors)
-        self.embed = nn.Linear(n_global_factors, 1)
+        self.embed = nn.Linear(global_hidden_size, n_global_factors)
     
-    def forward(self, X):
+    def forward(self, X,):
         if isinstance(X, type(np.empty(2))):
             X = torch.from_numpy(X).float()
         num_ts, num_periods, num_features = X.size()
@@ -80,6 +80,7 @@ class DFRNN(nn.Module):
         for t in range(num_periods):
             gt = self.global_factor(X[:, t, :])
             ft = self.embed(gt)
+            ft = ft.sum(dim=1).view(-1, 1)
             sigma_t = self.noise(X[:, t, :])
             mu.append(ft)
             sigma.append(sigma_t)
