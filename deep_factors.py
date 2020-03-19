@@ -137,7 +137,7 @@ def train(
     - num_skus_to_show (int): how many skus to show in test phase
     - num_results_to_sample (int): how many samples in test phase as prediction
     '''
-    rho = args.quantile
+    # rho = args.quantile
     num_ts, num_periods, num_features = X.shape
     model = DFRNN(num_features, args.noise_nlayers, 
         args.noise_hidden_size, args.global_nlayers, 
@@ -189,19 +189,31 @@ def train(
     yf_test = yte[:, -seq_len:].reshape((num_ts, -1))
     if yscaler is not None:
         y_test = yscaler.transform(y_test)
-    y_pred = model.sample(Xf_test)
-    y_pred = y_pred.data.numpy()
-    if yscaler is not None:
-        y_pred = yscaler.inverse_transform(y_pred)
     
-    mape = util.MAPE(yf_test, y_pred)
-    print("MAPE: {}".format(mape))
+    result = []
+    n_samples = args.sample_size
+    for _ in tqdm(range(n_samples)):
+        y_pred = model.sample(Xf_test)
+        y_pred = y_pred.data.numpy()
+        if yscaler is not None:
+            y_pred = yscaler.inverse_transform(y_pred)
+        result.append(y_pred.reshape((-1, 1)))
+    
+    result = np.concatenate(result, axis=1)
+    p50 = np.quantile(result, 0.5, axis=1)
+    p90 = np.quantile(result, 0.9, axis=1)
+    p10 = np.quantile(result, 0.1, axis=1)
+
+    mape = util.MAPE(yf_test, p50)
+    print("P50 MAPE: {}".format(mape))
     mape_list.append(mape)
 
     if args.show_plot:
         plt.figure(1)
         plt.plot([k + seq_len + num_obs_to_train - seq_len \
-            for k in range(seq_len)], y_pred[-1], "r-")
+            for k in range(seq_len)], p50, "r-")
+        plt.fill_between(x=[k + seq_len + num_obs_to_train - seq_len for k in range(seq_len)], \
+            y1=p10, y2=p90, alpha=0.5)
         plt.title('Prediction uncertainty')
         yplot = yte[-1, -seq_len-num_obs_to_train:]
         plt.plot(range(len(yplot)), yplot, "k-")
@@ -232,7 +244,7 @@ if __name__ == "__main__":
     parser.add_argument("--log_scaler", "-ls", action="store_true")
     parser.add_argument("--mean_scaler", "-ms", action="store_true")
     parser.add_argument("--batch_size", "-b", type=int, default=64)
-    parser.add_argument("--quantile", "-p", type=float, default=0.5)
+    parser.add_argument("--sample_size", "-n_sample", type=int, default=20)
 
     args = parser.parse_args()
 
