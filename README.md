@@ -18,7 +18,7 @@ pythonw deepar.py -e 100 -spe 3 -nl 1 -l g -not 168 -sp -rt -es 10 -hs 50  -sl 6
 pythonw mq_rnn.py -e 100 -spe 3 -nl 1 -sp -sl 72 -not 168 -rt -ehs 50 -dhs 20 -ss -es 10 -ms
 
 # Deep Factors
-pythonw deep_factors.py -e 100 -spe 3 -rt -not 168 -sp -sl 168 -ms
+pythonw deep_factors.py -e 100 -spe 3 -rt -not 168 -sp -sl 168 -ms -ss 100
 ```
 
 ## Arguments
@@ -31,6 +31,7 @@ pythonw deep_factors.py -e 100 -spe 3 -rt -not 168 -sp -sl 168 -ms
 | -ms | mean scaler on y|
 | -nl | number of layers|
 | -l | likelihood to select, "g" or "nb"|
+| -ss | sample size to sample after training in deep factors|
 
 #### TO DO
 * [ ] Deep Factor Model
