@@ -109,3 +109,24 @@ def gaussian_likelihood_loss(z, mu, sigma):
     '''
     negative_likelihood = torch.log(sigma + 1) + (z - mu) ** 2 / (2 * sigma ** 2) + 6
     return negative_likelihood.mean()
+
+def negative_binomial_loss(ytrue, mu, alpha):
+    '''
+    Negative Binomial Sample
+    Args:
+    ytrue (array like)
+    mu (array like)
+    alpha (array like)
+
+    maximuze log l_{nb} = log Gamma(z + 1/alpha) - log Gamma(z + 1) - log Gamma(1 / alpha)
+                - 1 / alpha * log (1 + alpha * mu) + z * log (alpha * mu / (1 + alpha * mu))
+
+    minimize loss = - log l_{nb}
+
+    Note: torch.lgamma: log Gamma function
+    '''
+    batch_size, seq_len = ytrue.size()
+    likelihood = torch.lgamma(ytrue + 1. / alpha) - torch.lgamma(ytrue + 1) - torch.lgamma(1. / alpha) \
+        - 1. / alpha * torch.log(1 + alpha * mu) \
+        + ytrue * torch.log(alpha * mu / (1 + alpha * mu))
+    return - likelihood.mean()
