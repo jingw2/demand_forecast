@@ -219,7 +219,7 @@ def train(
 
     if args.show_plot:
         show_idx = 0
-        plt.figure(1)
+        plt.figure(1, figsize=(20, 5))
         plt.plot([k + seq_len + num_obs_to_train - seq_len \
             for k in range(seq_len)], ypred[show_idx, :, 1], "r-")
         plt.fill_between(x=[k + seq_len + num_obs_to_train - seq_len for k in range(seq_len)], \
@@ -228,6 +228,9 @@ def train(
         yplot = yte[show_idx, -seq_len-num_obs_to_train:]
         plt.plot(range(len(yplot)), yplot, "k-")
         plt.legend(["P50 forecast", "true", "P10-P90 quantile"], loc="upper left")
+        ymin, ymax = plt.ylim()
+        plt.vlines(seq_len + num_obs_to_train - seq_len, ymin, ymax, color="blue", linestyles="dashed", linewidth=2)
+        plt.ylim(ymin, ymax)
         plt.xlabel("Periods")
         plt.ylabel("Y")
         plt.show()
