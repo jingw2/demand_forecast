@@ -18,8 +18,14 @@ pythonw deepar.py -e 100 -spe 3 -nl 1 -l g -not 168 -sp -rt -es 10 -hs 50  -sl 6
 pythonw mq_rnn.py -e 100 -spe 3 -nl 1 -sp -sl 72 -not 168 -rt -ehs 50 -dhs 20 -ss -es 10 -ms
 
 # Deep Factors
-pythonw deep_factors.py -e 100 -spe 3 -rt -not 168 -sp -sl 168 -ms -ss 100
+pythonw deep_factors.py -e 100 -spe 3 -rt -not 168 -sp -sl 168 -ms
 ```
+DeepAR \
+![alt text](https://github.com/jingw2/demand_forecast/blob/master/deepar.png) \
+MQ-RNN \
+![alt text](https://github.com/jingw2/demand_forecast/blob/master/mq_rnn.png) \
+Deep Factors \
+![alt text](https://github.com/jingw2/demand_forecast/blob/master/deep_factors.png)
 
 ## Arguments
 |  Arguments   | Details  |
@@ -31,7 +37,7 @@ pythonw deep_factors.py -e 100 -spe 3 -rt -not 168 -sp -sl 168 -ms -ss 100
 | -ms | mean scaler on y|
 | -nl | number of layers|
 | -l | likelihood to select, "g" or "nb"|
-| -sample_size | sample size to sample after training in deep factors/deepar|
+| -sample_size | sample size to sample after </br> training in deep factors/deepar, default 100|
 
 #### TO DO
 * [ ] Deep Factor Model
