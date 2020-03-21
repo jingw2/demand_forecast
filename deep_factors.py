@@ -209,7 +209,7 @@ def train(
     mape_list.append(mape)
 
     if args.show_plot:
-        plt.figure(1)
+        plt.figure(1, figsize=(20, 5))
         plt.plot([k + seq_len + num_obs_to_train - seq_len \
             for k in range(seq_len)], p50, "r-")
         plt.fill_between(x=[k + seq_len + num_obs_to_train - seq_len for k in range(seq_len)], \
@@ -218,6 +218,9 @@ def train(
         yplot = yte[-1, -seq_len-num_obs_to_train:]
         plt.plot(range(len(yplot)), yplot, "k-")
         plt.legend(["P50 forecast", "true", "P10-P90 quantile"], loc="upper left")
+        ymin, ymax = plt.ylim()
+        plt.vlines(seq_len + num_obs_to_train - seq_len, ymin, ymax, color="blue", linestyles="dashed", linewidth=2)
+        plt.ylim(ymin, ymax)
         plt.xlabel("Periods")
         plt.ylabel("Y")
         plt.show()
@@ -244,7 +247,7 @@ if __name__ == "__main__":
     parser.add_argument("--log_scaler", "-ls", action="store_true")
     parser.add_argument("--mean_scaler", "-ms", action="store_true")
     parser.add_argument("--batch_size", "-b", type=int, default=64)
-    parser.add_argument("--sample_size", "-n_sample", type=int, default=20)
+    parser.add_argument("--sample_size", type=int, default=20)
 
     args = parser.parse_args()
 
