@@ -31,7 +31,7 @@ pythonw deep_factors.py -e 100 -spe 3 -rt -not 168 -sp -sl 168 -ms -ss 100
 | -ms | mean scaler on y|
 | -nl | number of layers|
 | -l | likelihood to select, "g" or "nb"|
-| -ss | sample size to sample after training in deep factors|
+| -sample_size | sample size to sample after training in deep factors/deepar|
 
 #### TO DO
 * [ ] Deep Factor Model
