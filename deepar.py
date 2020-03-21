@@ -25,7 +25,7 @@ from datetime import date
 import argparse
 from progressbar import *
 
-class GaussianLikelihood(nn.Module):
+class Gaussian(nn.Module):
 
     def __init__(self, hidden_size, output_size):
         '''
@@ -34,7 +34,7 @@ class GaussianLikelihood(nn.Module):
         input_size (int): hidden h_{i,t} column size
         output_size (int): embedding size
         '''
-        super(GaussianLikelihood, self).__init__()
+        super(Gaussian, self).__init__()
         self.mu_layer = nn.Linear(hidden_size, output_size)
         self.sigma_layer = nn.Linear(hidden_size, output_size)
 
@@ -68,9 +68,9 @@ class NegativeBinomial(nn.Module):
         mu_t = torch.log(1 + torch.exp(self.mu_layer(h)))
         return mu_t, alpha_t
 
-def gaussian_likelihood(ytrue, mu, sigma):
+def gaussian_sample(mu, sigma):
     '''
-    Gaussian Loss Functions -log P(y|X)
+    Gaussian Sample
     Args:
     ytrue (array like)
     mu (array like)
@@ -79,13 +79,16 @@ def gaussian_likelihood(ytrue, mu, sigma):
     gaussian maximum likelihood using log 
         l_{G} (z|mu, sigma) = (2 * pi * sigma^2)^(-0.5) * exp(- (z - mu)^2 / (2 * sigma^2))
     '''
-    likelihood = (2 * np.pi * sigma ** 2) ** (-0.5) * \
-            torch.exp((- (ytrue - mu) ** 2) / (2 * sigma ** 2))
-    return likelihood
+    # likelihood = (2 * np.pi * sigma ** 2) ** (-0.5) * \
+    #         torch.exp((- (ytrue - mu) ** 2) / (2 * sigma ** 2))
+    # return likelihood
+    gaussian = torch.distributions.normal.Normal(mu, sigma)
+    ypred = gaussian.sample(mu.size())
+    return ypred
 
-def negative_binomial_likelihood(ytrue, mu, alpha):
+def negative_binomial_sample(mu, alpha):
     '''
-    Negative Binomial Loss
+    Negative Binomial Sample
     Args:
     ytrue (array like)
     mu (array like)
@@ -98,11 +101,9 @@ def negative_binomial_likelihood(ytrue, mu, alpha):
 
     Note: torch.lgamma: log Gamma function
     '''
-    batch_size, seq_len = ytrue.size()
-    likelihood = torch.lgamma(ytrue + 1. / alpha) - torch.lgamma(ytrue + 1) - torch.lgamma(1. / alpha) \
-        - 1. / alpha * torch.log(1 + alpha * mu) \
-        + ytrue * torch.log(alpha * mu / (1 + alpha * mu))
-    return torch.exp(likelihood)
+    var = mu + mu * mu * alpha
+    ypred = mu + torch.randn(mu.size()) * torch.sqrt(var)
+    return ypred
 
 class DeepAR(nn.Module):
 
@@ -114,7 +115,7 @@ class DeepAR(nn.Module):
         self.encoder = nn.LSTM(embedding_size+input_size, hidden_size, \
                 num_layers, bias=True, batch_first=True)
         if likelihood == "g":
-            self.likelihood_layer = GaussianLikelihood(hidden_size, 1)
+            self.likelihood_layer = Gaussian(hidden_size, 1)
         elif likelihood == "nb":
             self.likelihood_layer = NegativeBinomial(hidden_size, 1)
         self.likelihood = likelihood
@@ -155,11 +156,11 @@ class DeepAR(nn.Module):
             mus.append(mu.view(-1, 1))
             sigmas.append(sigma.view(-1, 1))
             if self.likelihood == "g":
-                ynext = gaussian_likelihood(ynext, mu, sigma)
+                ynext = gaussian_sample(mu, sigma)
             elif self.likelihood == "nb":
                 alpha_t = sigma
                 mu_t = mu
-                ynext = negative_binomial_likelihood(ynext, mu_t, alpha_t)
+                ynext = negative_binomial_sample(mu_t, alpha_t)
             # if without true value, use prediction
             if s >= seq_len - 1 and s < output_horizon + seq_len - 1:
                 ypred.append(ynext)
@@ -204,7 +205,6 @@ def train(
     - num_skus_to_show (int): how many skus to show in test phase
     - num_results_to_sample (int): how many samples in test phase as prediction
     '''
-    rho = args.quantile
     num_ts, num_periods, num_features = X.shape
     model = DeepAR(num_features, args.embedding_size, 
         args.hidden_size, args.n_layers, args.lr, args.likelihood)
@@ -243,7 +243,10 @@ def train(
             # loss = torch.max(rho * e, (rho - 1) * e).mean()
             ## gaussian loss
             ytrain_tensor = torch.cat([ytrain_tensor, yf], dim=1)
-            loss = util.gaussian_likelihood_loss(ytrain_tensor, mu, sigma)
+            if args.likelihood == "g":
+                loss = util.gaussian_likelihood_loss(ytrain_tensor, mu, sigma)
+            elif args.likelihood == "nb":
+                loss = util.negative_binomial_loss(ytrain_tensor, mu, sigma)
             losses.append(loss.item())
             optimizer.zero_grad()
             loss.backward()
@@ -259,23 +262,37 @@ def train(
     yf_test = yte[:, -seq_len:].reshape((num_ts, -1))
     if yscaler is not None:
         y_test = yscaler.transform(y_test)
-    y_pred, _, _ = model(X_test, y_test, Xf_test)
-    y_pred = y_pred.data.numpy()
-    if yscaler is not None:
-        y_pred = yscaler.inverse_transform(y_pred)
+    result = []
+    n_samples = args.sample_size
+    for _ in tqdm(range(n_samples)):
+        y_pred, _, _ = model(X_test, y_test, Xf_test)
+        y_pred = y_pred.data.numpy()
+        if yscaler is not None:
+            y_pred = yscaler.inverse_transform(y_pred)
+        result.append(y_pred.reshape((-1, 1)))
     
-    mape = util.MAPE(yf_test, y_pred)
-    print("MAPE: {}".format(mape))
+    result = np.concatenate(result, axis=1)
+    p50 = np.quantile(result, 0.5, axis=1)
+    p90 = np.quantile(result, 0.9, axis=1)
+    p10 = np.quantile(result, 0.1, axis=1)
+    
+    mape = util.MAPE(yf_test, p50)
+    print("P50 MAPE: {}".format(mape))
     mape_list.append(mape)
 
     if args.show_plot:
-        plt.figure(1)
+        plt.figure(1, figsize=(20, 5))
         plt.plot([k + seq_len + num_obs_to_train - seq_len \
-            for k in range(seq_len)], y_pred[-1], "r-")
+            for k in range(seq_len)], p50, "r-")
+        plt.fill_between(x=[k + seq_len + num_obs_to_train - seq_len for k in range(seq_len)], \
+            y1=p10, y2=p90, alpha=0.5)
         plt.title('Prediction uncertainty')
         yplot = yte[-1, -seq_len-num_obs_to_train:]
         plt.plot(range(len(yplot)), yplot, "k-")
         plt.legend(["P50 forecast", "true", "P10-P90 quantile"], loc="upper left")
+        ymin, ymax = plt.ylim()
+        plt.vlines(seq_len + num_obs_to_train - seq_len, ymin, ymax, color="blue", linestyles="dashed", linewidth=2)
+        plt.ylim(ymin, ymax)
         plt.xlabel("Periods")
         plt.ylabel("Y")
         plt.show()
@@ -299,7 +316,7 @@ if __name__ == "__main__":
     parser.add_argument("--log_scaler", "-ls", action="store_true")
     parser.add_argument("--mean_scaler", "-ms", action="store_true")
     parser.add_argument("--batch_size", "-b", type=int, default=64)
-    parser.add_argument("--quantile", "-p", type=float, default=0.5)
+    parser.add_argument("--sample_size", type=int, default=100)
 
     args = parser.parse_args()
 
