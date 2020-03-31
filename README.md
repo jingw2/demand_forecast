@@ -21,11 +21,11 @@ pythonw mq_rnn.py -e 100 -spe 3 -nl 1 -sp -sl 72 -not 168 -rt -ehs 50 -dhs 20 -s
 pythonw deep_factors.py -e 100 -spe 3 -rt -not 168 -sp -sl 168 -ms
 ```
 DeepAR \
-![alt text](https://github.com/jingw2/demand_forecast/blob/master/deepar.png) \
+![alt text](https://github.com/jingw2/demand_forecast/blob/master/pic/deepar.png) \
 MQ-RNN \
-![alt text](https://github.com/jingw2/demand_forecast/blob/master/mq_rnn.png) \
+![alt text](https://github.com/jingw2/demand_forecast/blob/master/pic/mq_rnn.png) \
 Deep Factors \
-![alt text](https://github.com/jingw2/demand_forecast/blob/master/deep_factors.png)
+![alt text](https://github.com/jingw2/demand_forecast/blob/master/pic/deep_factors.png)
 
 ## Arguments
 |  Arguments   | Details  |
