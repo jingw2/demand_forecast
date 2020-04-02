@@ -40,7 +40,7 @@ Deep Factors \
 | -sample_size | sample size to sample after </br> training in deep factors/deepar, default 100|
 
 #### TO DO
-* [ ] Deep Factor Model
+* [X] Deep Factor Model
 * [ ] TPA-LSTM pytorch 
 * [ ] LSTNet pytorch
 * [ ] Model API
