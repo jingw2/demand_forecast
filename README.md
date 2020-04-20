@@ -51,6 +51,8 @@ TPA-LSTM \
 * [X] TPA-LSTM pytorch 
 * [ ] LSTNet pytorch
 * [ ] Debug Uber Extreme forcaster
+* [ ] Modeling Extreme Events in TS
+* [X] Intermittent Demand Forecasting
 * [ ] Model API
 
 # Demand Forecast Dataset Resources
