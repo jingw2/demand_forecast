@@ -21,14 +21,16 @@ python mq_rnn.py -e 100 -spe 3 -nl 1 -sp -sl 72 -not 168 -rt -ehs 50 -dhs 20 -ss
 python deep_factors.py -e 100 -spe 3 -rt -not 168 -sp -sl 168 -ms
 
 # TPA-LSTM
-python 
+python tpa_lstm.py -e 1000 -spe 1 -nl 1 -not 168 -sl 30 -sp -rt -max
 ```
 DeepAR \
 ![alt text](https://github.com/jingw2/demand_forecast/blob/master/pic/deepar.png) \
 MQ-RNN \
 ![alt text](https://github.com/jingw2/demand_forecast/blob/master/pic/mq_rnn.png) \
 Deep Factors \
-![alt text](https://github.com/jingw2/demand_forecast/blob/master/pic/deep_factors.png)
+![alt text](https://github.com/jingw2/demand_forecast/blob/master/pic/deep_factors.png) \
+TPA-LSTM \
+![alt text](https://github.com/jingw2/demand_forecast/blob/master/pic/tpa_lstm.png)
 
 ## Arguments
 |  Arguments   | Details  |
@@ -38,6 +40,7 @@ Deep Factors \
 | -sl | sequence length |
 | -not | number of observations to train|
 | -ms | mean scaler on y|
+| -max | max scaler on y|
 | -nl | number of layers|
 | -l | likelihood to select, "g" or "nb"|
 | -sample_size | sample size to sample after </br> training in deep factors/deepar, default 100|
@@ -52,6 +55,7 @@ Deep Factors \
 * [Solar Energy](https://www.nrel.gov/grid/solar-power-data.html)
 * [Traffic](http://pems.dot.ca.gov/)
 * [Electricity](https://arxiv.org/pdf/1809.04206v2.pdf)
+* [MuseDATA](http://www-etud.iro.umontreal.ca/~boulanni/icml2012)
 
 # Reference
 * [DeepAR](https://arxiv.org/abs/1704.04110)
