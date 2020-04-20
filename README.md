@@ -12,13 +12,16 @@ pip install -r requirement.txt
 ## Run tests
 ```python
 # DeepAR
-pythonw deepar.py -e 100 -spe 3 -nl 1 -l g -not 168 -sp -rt -es 10 -hs 50  -sl 60 -ms
+python deepar.py -e 100 -spe 3 -nl 1 -l g -not 168 -sp -rt -es 10 -hs 50  -sl 60 -ms
 
 # MQ-RNN
-pythonw mq_rnn.py -e 100 -spe 3 -nl 1 -sp -sl 72 -not 168 -rt -ehs 50 -dhs 20 -ss -es 10 -ms
+python mq_rnn.py -e 100 -spe 3 -nl 1 -sp -sl 72 -not 168 -rt -ehs 50 -dhs 20 -ss -es 10 -ms
 
 # Deep Factors
-pythonw deep_factors.py -e 100 -spe 3 -rt -not 168 -sp -sl 168 -ms
+python deep_factors.py -e 100 -spe 3 -rt -not 168 -sp -sl 168 -ms
+
+# TPA-LSTM
+python 
 ```
 DeepAR \
 ![alt text](https://github.com/jingw2/demand_forecast/blob/master/pic/deepar.png) \
@@ -41,9 +44,14 @@ Deep Factors \
 
 #### TO DO
 * [X] Deep Factor Model
-* [ ] TPA-LSTM pytorch 
+* [X] TPA-LSTM pytorch 
 * [ ] LSTNet pytorch
 * [ ] Model API
+
+# Demand Forecast Dataset Resources
+* [Solar Energy](https://www.nrel.gov/grid/solar-power-data.html)
+* [Traffic](http://pems.dot.ca.gov/)
+* [Electricity](https://arxiv.org/pdf/1809.04206v2.pdf)
 
 # Reference
 * [DeepAR](https://arxiv.org/abs/1704.04110)
