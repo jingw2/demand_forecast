@@ -6,7 +6,7 @@ Pytorch Implementation of DeepAR, MQ-RNN, Deep Factor Models, LSTNet, and TPA-LS
 Please install [Pytorch](https://pytorch.org/) before run it, and 
 
 ```python
-pip install -r requirement.txt
+pip install -r requirements.txt
 ```
 
 ## Run tests
