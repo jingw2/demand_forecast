@@ -43,6 +43,7 @@ TPA-LSTM \
 | -max | max scaler on y|
 | -nl | number of layers|
 | -l | likelihood to select, "g" or "nb"|
+| -rt | run test data |
 | -sample_size | sample size to sample after </br> training in deep factors/deepar, default 100|
 
 #### TO DO
