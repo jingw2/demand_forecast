@@ -67,3 +67,6 @@ TPA-LSTM \
 * [TPA-LSTM](https://arxiv.org/pdf/1809.04206v2.pdf)
 * [LSTNet Github](https://github.com/laiguokun/LSTNet)
 * [TPA-LSTM Github](https://github.com/gantheory/TPA-LSTM)
+* [Uber Extreme Event Forecast 1](http://roseyu.com/time-series-workshop/submissions/TSW2017_paper_3.pdf)
+* [Uber Extreme Event Forecast 2](https://forecasters.org/wp-content/uploads/gravity_forms/7-c6dd08fee7f0065037affb5b74fec20a/2017/07/Laptev_Nikolay_ISF2017.pdf)
+* [Modeling Extreme Events in Time Series Prediction](http://staff.ustc.edu.cn/~hexn/papers/kdd19-timeseries.pdf)
