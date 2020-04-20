@@ -50,6 +50,7 @@ TPA-LSTM \
 * [X] Deep Factor Model
 * [X] TPA-LSTM pytorch 
 * [ ] LSTNet pytorch
+* [ ] Debug Uber Extreme forcaster
 * [ ] Model API
 
 # Demand Forecast Dataset Resources
