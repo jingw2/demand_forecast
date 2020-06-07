@@ -125,6 +125,7 @@ class DeepAR(nn.Module):
         Args:
         X (array like): shape (num_time_series, seq_len, input_size)
         y (array like): shape (num_time_series, seq_len)
+        Xf (array like): shape (num_time_series, horizon, input_size)
         Return:
         mu (array like): shape (batch_size, seq_len)
         sigma (array like): shape (batch_size, seq_len)
@@ -139,6 +140,7 @@ class DeepAR(nn.Module):
         ypred = []
         mus = []
         sigmas = []
+        h, c = None, None
         for s in range(seq_len + output_horizon):
             if s < seq_len:
                 ynext = y[:, s].view(-1, 1)
@@ -149,8 +151,11 @@ class DeepAR(nn.Module):
                 x = Xf[:, s-seq_len, :].view(num_ts, -1)
             x = torch.cat([x, yembed], dim=1) # num_ts, num_features + embedding
             inp = x.unsqueeze(1)
-            out, (hs, c) = self.encoder(inp) # h size (num_layers, num_ts, hidden_size)
-            hs = hs[-1, :, :]
+            if h is None and c is None:
+                out, (h, c) = self.encoder(inp) # h size (num_layers, num_ts, hidden_size)
+            else:
+                out, (h, c) = self.encoder(inp, (h, c))
+            hs = h[-1, :, :]
             hs = F.relu(hs)
             mu, sigma = self.likelihood_layer(hs)
             mus.append(mu.view(-1, 1))
