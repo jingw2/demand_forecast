@@ -68,6 +68,18 @@ class StandardScaler:
     def transform(self, y):
         return (y - self.mean) / self.std
 
+class MaxScaler:
+
+    def fit_transform(self, y):
+        self.max = np.max(y)
+        return y / self.max
+    
+    def inverse_transform(self, y):
+        return y * self.max
+
+    def transform(self, y):
+        return y / self.max
+
 
 class MeanScaler:
     
@@ -130,3 +142,23 @@ def negative_binomial_loss(ytrue, mu, alpha):
         - 1. / alpha * torch.log(1 + alpha * mu) \
         + ytrue * torch.log(alpha * mu / (1 + alpha * mu))
     return - likelihood.mean()
+
+def batch_generator(X, y, num_obs_to_train, seq_len, batch_size):
+    '''
+    Args:
+    X (array like): shape (num_samples, num_features, num_periods)
+    y (array like): shape (num_samples, num_periods)
+    num_obs_to_train (int):
+    seq_len (int): sequence/encoder/decoder length
+    batch_size (int)
+    '''
+    num_ts, num_periods, _ = X.shape
+    if num_ts < batch_size:
+        batch_size = num_ts
+    t = random.choice(range(num_obs_to_train, num_periods-seq_len))
+    batch = random.sample(range(num_ts), batch_size)
+    X_train_batch = X[batch, t-num_obs_to_train:t, :]
+    y_train_batch = y[batch, t-num_obs_to_train:t]
+    Xf = X[batch, t:t+seq_len]
+    yf = y[batch, t:t+seq_len]
+    return X_train_batch, y_train_batch, Xf, yf
