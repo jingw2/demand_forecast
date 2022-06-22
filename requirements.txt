@@ -4,6 +4,6 @@ tqdm==4.45.0
 scipy==1.4.1
 torch==1.1.0
 pandas==0.25.3
-numpy==1.16.1
+numpy==1.22.0
 progressbar33==2.4
 scikit_learn==0.22.2.post1
